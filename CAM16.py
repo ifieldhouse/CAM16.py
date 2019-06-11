@@ -101,6 +101,58 @@ class VC:
     Aw = (np.array([2, 1, 1/20]) @ RGBaw - 0.305) * Nbb
 
 
+class CAM16:
+
+    def __init__(self, J, C, h):
+        self.J = J
+        self.C = C
+        self.h = h
+
+    @property
+    def hue_composition(self):
+        if HUE_DATA.at[0, 'h'] < self.h < HUE_DATA.at[1, 'h']:
+            i = 1
+        elif HUE_DATA.at[1, 'h'] < self.h < HUE_DATA.at[2, 'h']:
+            i = 2
+        elif HUE_DATA.at[2, 'h'] < self.h < HUE_DATA.at[3, 'h']:
+            i = 3
+        elif HUE_DATA.at[3, 'h'] < self.h < HUE_DATA.at[4, 'h']:
+            i = 4
+
+        p1 = (self.h - HUE_DATA.at[i-1, 'h'])/_eccentricity(HUE_DATA.at[i-1, 'h'])
+        p2 = (HUE_DATA.at[i, 'h'] - self.h)/_eccentricity(HUE_DATA.at[i, 'h'])
+
+        H = HUE_DATA.at[i-1, 'H'] + (100*p1)/(p1 + p2)
+
+        p3 = HUE_DATA.at[i, 'H'] - H
+        p4 = H - HUE_DATA.at[i-1, 'H']
+        
+        return {HUE_DATA.at[i-1, 'hue']: p3, HUE_DATA.at[i, 'hue']: p4}
+
+    @property
+    def Q(self):
+        return (4/VC.S.c) * (self.J/100)**0.5 * (VC.Aw + 4) * VC.FL**0.25
+    
+    @property
+    def M(self):
+        return self.C * VC.FL**0.25
+    
+    @property
+    def s(self):
+        return 100 * (self.M/self.Q)**0.5
+    
+    @classmethod
+    def from_sRGB(cls, R, G, B):
+        pass
+    
+    @classmethod
+    def from_XYZ(cls, X, Y, Z):
+        pass
+    
+    def as_sRGB(self):
+        pass
+
+
 # mode='hex'|'hexadecimal', mode='dec'|'decimal', mode='frac'|'fractional'
 def CAM16_to_sRGB(J, C, h):
 
@@ -181,26 +233,14 @@ def sRGB_to_CAM16(R, G, B):
     # Eccentricity
     e = _eccentricity(hp)
 
-    # Hue composition
-    H = _hue_composition(h)
-
     # Achromatic response
     A = (np.array([2, 1, 1/20]) @ RGB - 0.305)*VC.Nbb
 
     # Lightness
     J = 100*(A/VC.Aw)**(VC.S.c*VC.z)
 
-    # Brightness
-    Q = (4/VC.S.c) * (J/100)**0.5 * (VC.Aw + 4) * VC.FL**0.25
-
     # Chroma
     C = _chroma(J, a, b, e, RGB)
-
-    # Colorfulness
-    M = C * VC.FL**0.25
-
-    # Saturation
-    s = 100 * (M/Q)**0.5
 
     return (J, C, h)
 
