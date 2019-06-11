@@ -136,23 +136,15 @@ def CAM16_to_sRGB(J, C, h):
 
     sRGB = XYZ_TO_SRGB_MATRIX @ (XYZ/100)
 
-    # def companding(v):
-    #     if v <= 0.0031308:
-    #         V = 12.92*v
-    #     else:
-    #         V = 1.055 * v**(1/2.4) - 0.055
-    #     return V
-
-    # sRGB = np.vectorize(companding)(sRGB)
-    # # sRGB = np.clip(sRGB, 0, 1)
-
     sRGB = np.where(
         sRGB <= 0.0031308,
         12.92*sRGB,
         1.055*sRGB**(1/2.4) - 0.055
     )
 
-    return np.round(255*sRGB).astype(int)
+    R, G, B = sRGB
+
+    return (R, G, B)
 
 
 def sRGB_to_CAM16(R, G, B):
@@ -171,13 +163,7 @@ def sRGB_to_CAM16(R, G, B):
     XYZ = 100*(SRGB_TO_XYZ_MATRIX @ sRGB)
 
     # Cone response
-    RGB = CAT16_MATRIX @ XYZ
-    RGB = VC.DRGB * RGB
-    RGB = np.where(
-        RGB < 0,
-        400 * (VC.FL*RGB/100)**0.42/((VC.FL*RGB/100)**0.42 + 27.13) + 0.1,
-        -400 * (-VC.FL*RGB/100)**0.42/((-VC.FL*RGB/100)**0.42 + 27.13) + 0.1
-    )
+    RGB = _cone_response(XYZ)
 
     # Red-green and yellow-blue components
     a = np.array([1, -12/11, 1/11]) @ RGB
@@ -193,33 +179,10 @@ def sRGB_to_CAM16(R, G, B):
     hp = h + 360 if h < HUE_DATA.at[0, 'h'] else h
 
     # Eccentricity
-    e = (1/4)*(np.cos(hp*np.pi/180 + 2) + 3.8)
-
-    # Hue quadrature composition
-    if HUE_DATA.at[0, 'h'] < h < HUE_DATA.at[1, 'h']:
-        i = 1
-    elif HUE_DATA.at[1, 'h'] < h < HUE_DATA.at[2, 'h']:
-        i = 2
-    elif HUE_DATA.at[2, 'h'] < h < HUE_DATA.at[3, 'h']:
-        i = 3
-    elif HUE_DATA.at[3, 'h'] < h < HUE_DATA.at[4, 'h']:
-        i = 4
-    pr = (h - HUE_DATA.at[i-1, 'h'])/HUE_DATA.at[i-1, 'e']
-    pl = (HUE_DATA.at[i, 'h'] - h)/HUE_DATA.at[i, 'e']
-    H = HUE_DATA.at[i-1, 'H'] + (100*pr)/(pr + pl)
+    e = _eccentricity(hp)
 
     # Hue composition
-    if HUE_DATA.at[0, 'H'] < H < HUE_DATA.at[1, 'H']:
-            i = 1
-    elif HUE_DATA.at[1, 'H'] < H < HUE_DATA.at[2, 'H']:
-        i = 2
-    elif HUE_DATA.at[2, 'H'] < H < HUE_DATA.at[3, 'H']:
-        i = 3
-    elif HUE_DATA.at[3, 'H'] < H < HUE_DATA.at[4, 'H']:
-        i = 4
-    PL = HUE_DATA.at[i, 'H'] - H
-    PR = H - HUE_DATA.at[i-1, 'H']
-    Hc = {HUE_DATA.at[i-1, 'hue']: PL, HUE_DATA.at[i, 'hue']: PR}
+    H = _hue_composition(h)
 
     # Achromatic response
     A = (np.array([2, 1, 1/20]) @ RGB - 0.305)*VC.Nbb
@@ -231,9 +194,7 @@ def sRGB_to_CAM16(R, G, B):
     Q = (4/VC.S.c) * (J/100)**0.5 * (VC.Aw + 4) * VC.FL**0.25
 
     # Chroma
-    tl = (50000/13) * VC.S.Nc * VC.Ncb * e * (a**2 + b**2)**(1/2)
-    tr = np.array([1, 1, 21/20]) @ RGB
-    C = (tl/tr)**0.9 * (J/100)**0.5 * (1.64 - 0.29**VC.n)**0.73
+    C = _chroma(J, a, b, e, RGB)
 
     # Colorfulness
     M = C * VC.FL**0.25
@@ -242,3 +203,43 @@ def sRGB_to_CAM16(R, G, B):
     s = 100 * (M/Q)**0.5
 
     return (J, C, h)
+
+def _cone_response(XYZ):
+    RGB = CAT16_MATRIX @ XYZ
+    RGB = VC.DRGB * RGB
+    RGB = np.where(
+        RGB < 0,
+        400 * (VC.FL*RGB/100)**0.42/((VC.FL*RGB/100)**0.42 + 27.13) + 0.1,
+        -400 * (-VC.FL*RGB/100)**0.42/((-VC.FL*RGB/100)**0.42 + 27.13) + 0.1
+    )
+
+    return RGB
+
+def _hue_composition(h):
+    if HUE_DATA.at[0, 'h'] < h < HUE_DATA.at[1, 'h']:
+        i = 1
+    elif HUE_DATA.at[1, 'h'] < h < HUE_DATA.at[2, 'h']:
+        i = 2
+    elif HUE_DATA.at[2, 'h'] < h < HUE_DATA.at[3, 'h']:
+        i = 3
+    elif HUE_DATA.at[3, 'h'] < h < HUE_DATA.at[4, 'h']:
+        i = 4
+
+    p1 = (h - HUE_DATA.at[i-1, 'h'])/_eccentricity(HUE_DATA.at[i-1, 'h'])
+    p2 = (HUE_DATA.at[i, 'h'] - h)/_eccentricity(HUE_DATA.at[i, 'h'])
+
+    H = HUE_DATA.at[i-1, 'H'] + (100*p1)/(p1 + p2)
+
+    p3 = HUE_DATA.at[i, 'H'] - H
+    p4 = H - HUE_DATA.at[i-1, 'H']
+    
+    return {HUE_DATA.at[i-1, 'hue']: p3, HUE_DATA.at[i, 'hue']: p4}
+
+def _eccentricity(h):
+    return (1/4)*(np.cos(h*np.pi/180 + 2) + 3.8)
+
+def _chroma(J, a, b, e, RGB):
+    p1 = (50000/13) * VC.S.Nc * VC.Ncb * e * (a**2 + b**2)**(1/2)
+    p2 = np.array([1, 1, 21/20]) @ RGB
+
+    return (p1/p2)**0.9 * (J/100)**0.5 * (1.64 - 0.29**VC.n)**0.73
