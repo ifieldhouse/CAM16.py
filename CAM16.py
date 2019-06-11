@@ -143,10 +143,23 @@ class CAM16:
 
     @classmethod
     def from_CAM16UCS(cls, J, C, h):
-        pass
+        J = J / (1.7-0.007*J)
+
+        M = C*VC.FL**0.25
+        M = (np.exp(M*0.0228) - 1)/0.0228
+        C = M/VC.FL**0.25
+
+        return cls(J, C, h)
 
     def as_CAM16UCS(self):
-        pass
+        J = 1.7*self.J/(1 + 0.007*self.J)
+        
+        M = np.log(1+0.0228*self.M)/0.0228
+        C = M/VC.FL**0.25
+
+        h = self.h
+
+        return (J, C, h)
 
     @classmethod
     def from_XYZ(cls, X, Y, Z):
@@ -284,6 +297,7 @@ class CAM16:
         # Decompanded sRGB
         sRGB = XYZ_TO_SRGB_MATRIX @ (XYZ/100)
 
+        print(sRGB)
         # Companded sRGB
         sRGB = np.where(
             sRGB <= 0.0031308,
@@ -299,5 +313,6 @@ class CAM16:
 
 
 if __name__ == '__main__':
-    color = CAM16(J=50, C=50, h=18+72*2)
-    print(color.as_sRGB(mode='hex'))
+    # color = CAM16(J=50, C=50, h=18+72*2)
+    color = CAM16.from_CAM16UCS(J=50, C=40, h=18+72*2)
+    print(color.as_sRGB())
