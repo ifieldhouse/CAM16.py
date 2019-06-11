@@ -119,8 +119,8 @@ class CAM16:
         elif HUE_DATA.at[3, 'h'] < self.h < HUE_DATA.at[4, 'h']:
             i = 4
 
-        p1 = (self.h - HUE_DATA.at[i-1, 'h'])/_eccentricity(HUE_DATA.at[i-1, 'h'])
-        p2 = (HUE_DATA.at[i, 'h'] - self.h)/_eccentricity(HUE_DATA.at[i, 'h'])
+        p1 = (self.h - HUE_DATA.at[i-1, 'h'])/self._eccentricity(HUE_DATA.at[i-1, 'h'])
+        p2 = (HUE_DATA.at[i, 'h'] - self.h)/self._eccentricity(HUE_DATA.at[i, 'h'])
 
         H = HUE_DATA.at[i-1, 'H'] + (100*p1)/(p1 + p2)
 
@@ -140,32 +140,30 @@ class CAM16:
     @property
     def s(self):
         return 100 * (self.M/self.Q)**0.5
-    
+
     @classmethod
-    def from_sRGB(cls, R, G, B):
-        # Companded sRGB
-        sRGB = np.array([R, G, B])
+    def from_CAM16UCS(cls, J, C, h):
+        pass
 
-        # Decompanded sRGB
-        sRGB = np.where(
-            sRGB <= 0.04045,
-            sRGB/12.92,
-            ((sRGB + 0.055)/1.055)**2.4
-        )
+    def as_CAM16UCS(self):
+        pass
 
-        # Tristimulus values
-        XYZ = 100*(SRGB_TO_XYZ_MATRIX @ sRGB)
-
-        X, Y, Z = XYZ
-
-        return cls.from_XYZ(X, Y, Z)
-    
     @classmethod
     def from_XYZ(cls, X, Y, Z):
         XYZ = np.array([X, Y, Z])
 
+        return cls._from_XYZ(XYZ)
+
+    @classmethod
+    def _from_XYZ(cls, XYZ):
         # Cone response
-        RGB = _cone_response(XYZ)
+        RGB = CAT16_MATRIX @ XYZ
+        RGB = VC.DRGB * RGB
+        RGB = np.where(
+            RGB < 0,
+            400 * (VC.FL*RGB/100)**0.42/((VC.FL*RGB/100)**0.42 + 27.13) + 0.1,
+            -400 * (-VC.FL*RGB/100)**0.42/((-VC.FL*RGB/100)**0.42 + 27.13) + 0.1
+        )
 
         # Red-green and yellow-blue components
         a = np.array([1, -12/11, 1/11]) @ RGB
@@ -181,7 +179,7 @@ class CAM16:
         hp = h + 360 if h < HUE_DATA.at[0, 'h'] else h
 
         # Eccentricity
-        e = _eccentricity(hp)
+        e = self._eccentricity(hp)
 
         # Achromatic response
         A = (np.array([2, 1, 1/20]) @ RGB - 0.305)*VC.Nbb
@@ -190,12 +188,19 @@ class CAM16:
         J = 100*(A/VC.Aw)**(VC.S.c*VC.z)
 
         # Chroma
-        C = _chroma(J, a, b, e, RGB)
+        p1 = (50000/13) * VC.S.Nc * VC.Ncb * e * (a**2 + b**2)**(1/2)
+        p2 = np.array([1, 1, 21/20]) @ RGB
+
+        C = (p1/p2)**0.9 * (J/100)**0.5 * (1.64 - 0.29**VC.n)**0.73
 
         return cls(J, C, h)
-    
-    # mode='hex'|'hexadecimal', mode='dec'|'decimal', mode='frac'|'fractional'
-    def as_sRGB(self):
+
+    def as_XYZ(self):
+        X, Y, Z = self._as_XYZ()
+
+        return X, Y, Z
+
+    def _as_XYZ(self):
         t = (self.C / ((self.J/100)**(1/2) * (1.64 - 0.29**VC.n)**0.73))**(1/0.9)
         e = (1/4) * (np.cos(self.h*(np.pi/180) + 2) + 3.8)
         A = VC.Aw * (self.J/100)**(1/(VC.S.c * VC.z))
@@ -226,58 +231,73 @@ class CAM16:
 
         XYZ = CAT16_INVERSE @ RGB
 
+        return XYZ
+
+    @classmethod
+    def from_sRGB(cls, R, G, B):
+        sRGB = np.array([R, G, B])
+
+        return cls._from_sRGB(sRGB)
+    
+    @classmethod
+    def _from_sRGB(cls, sRGB):
+        # Decompanded sRGB
+        sRGB = np.where(
+            sRGB <= 0.04045,
+            sRGB/12.92,
+            ((sRGB + 0.055)/1.055)**2.4
+        )
+
+        # Tristimulus values
+        XYZ = 100*(SRGB_TO_XYZ_MATRIX @ sRGB)
+
+        return cls._from_XYZ(XYZ)
+
+    def as_sRGB(self, mode='decimal'):
+        """
+        Mode:
+        - dec | decimal
+        - hex | hexadecimal
+        - fractional
+        - percent
+        """
+
+        sRGB = self._as_sRGB()
+
+        if mode in ('dec', 'decimal'):
+            R, G, B = (255*sRGB).astype(int)
+            return R, G, B
+        elif mode in ('hex', 'hexadecimal'):
+            R, G, B = (255*sRGB).astype(int)
+            return f'#{R:02x}{G:02x}{B:02x}'
+        elif mode == 'fractional':
+            R, G, B = np.round(sRGB, decimals=3)
+            return R, G, B
+        elif mode == 'percent':
+            R, G, B = (100*sRGB).astype(int)
+            return R, G, B
+
+    def _as_sRGB(self):
+        # Tristimulus values
+        XYZ = self._as_XYZ()
+
+        # Decompanded sRGB
         sRGB = XYZ_TO_SRGB_MATRIX @ (XYZ/100)
 
+        # Companded sRGB
         sRGB = np.where(
             sRGB <= 0.0031308,
             12.92*sRGB,
             1.055*sRGB**(1/2.4) - 0.055
         )
 
-        R, G, B = sRGB
-
-        return (R, G, B)
-
-    @staticmethod
-    def _cone_response(XYZ):
-        RGB = CAT16_MATRIX @ XYZ
-        RGB = VC.DRGB * RGB
-        RGB = np.where(
-            RGB < 0,
-            400 * (VC.FL*RGB/100)**0.42/((VC.FL*RGB/100)**0.42 + 27.13) + 0.1,
-            -400 * (-VC.FL*RGB/100)**0.42/((-VC.FL*RGB/100)**0.42 + 27.13) + 0.1
-        )
-
-        return RGB
-
-    @staticmethod
-    def _hue_composition(h):
-        if HUE_DATA.at[0, 'h'] < h < HUE_DATA.at[1, 'h']:
-            i = 1
-        elif HUE_DATA.at[1, 'h'] < h < HUE_DATA.at[2, 'h']:
-            i = 2
-        elif HUE_DATA.at[2, 'h'] < h < HUE_DATA.at[3, 'h']:
-            i = 3
-        elif HUE_DATA.at[3, 'h'] < h < HUE_DATA.at[4, 'h']:
-            i = 4
-
-        p1 = (h - HUE_DATA.at[i-1, 'h'])/_eccentricity(HUE_DATA.at[i-1, 'h'])
-        p2 = (HUE_DATA.at[i, 'h'] - h)/_eccentricity(HUE_DATA.at[i, 'h'])
-
-        H = HUE_DATA.at[i-1, 'H'] + (100*p1)/(p1 + p2)
-
-        p3 = HUE_DATA.at[i, 'H'] - H
-        p4 = H - HUE_DATA.at[i-1, 'H']
-        
-        return {HUE_DATA.at[i-1, 'hue']: p3, HUE_DATA.at[i, 'hue']: p4}
+        return sRGB
 
     @staticmethod
     def _eccentricity(h):
         return (1/4)*(np.cos(h*np.pi/180 + 2) + 3.8)
 
-    @staticmethod
-    def _chroma(J, a, b, e, RGB):
-        p1 = (50000/13) * VC.S.Nc * VC.Ncb * e * (a**2 + b**2)**(1/2)
-        p2 = np.array([1, 1, 21/20]) @ RGB
 
-        return (p1/p2)**0.9 * (J/100)**0.5 * (1.64 - 0.29**VC.n)**0.73
+if __name__ == '__main__':
+    color = CAM16(J=50, C=50, h=18+72*2)
+    print(color.as_sRGB(mode='hex'))
