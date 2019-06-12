@@ -51,10 +51,23 @@ SURROUND_PARAMETERS = pd.DataFrame(np.array([
 ]), index=['average', 'dim', 'dark'], columns=['F', 'c', 'Nc'])
 
 
-ILLUMINANT_D65 = pd.DataFrame(np.array([
-    [95.047, 100.0, 108.883],
-    [94.811, 100.0, 107.304]
-]), index=['2°', '10°'])
+@dataclass
+class Illuminant:
+    def __init__(self, x, y):
+        self.x = x
+        self.y = y
+    
+    @property
+    def X(self):
+        return self.Y * self.x/self.y
+    
+    @property
+    def Y(self):
+        return 100
+
+    @property    
+    def Z(self):
+        return self.Y * (1-self.x-self.y)/self.y
 
 
 @dataclass
@@ -62,7 +75,10 @@ class VC:
     # Using Illuminant D65/2°.
     # XYZ tristimulus values, normalizing for relative luminance.
     # Source: Illuminant D65, Wikipedia.
-    XYZw = ILLUMINANT_D65.loc['2°']
+
+    D65 = Illuminant(x=0.31271, y=0.32902)
+    XYZ_w = np.array([D65.X, D65.Y, D65.Z])
+    # XYZ_w = ILLUMINANT_D75.loc['2°']
 
     # Using Average surround.
     # Source: Table A1, Comprehensive color solutions. DOI: 10.1002/col.22131.
@@ -70,34 +86,35 @@ class VC:
 
     # Using a sRGB luminance of 64 lux, and surround reflectance of 20%.
     # Source: sRGB, Wikipedia.
-    Ew = 64
-    Lw = Ew/np.pi
-    Yb = 20
-    LA = (Lw * Yb)/XYZw[1]
+    E_w = 64
+    L_w = E_w/np.pi
+    Y_b = 20
+    L_A = (L_w * Y_b)/XYZ_w[1]
 
-    RGBw = SRGB_TO_XYZ_MATRIX @ XYZw
+    # Question: Is this correct? Shouldn’t it be LMS color space?
+    RGB_w = SRGB_TO_XYZ_MATRIX @ XYZ_w
 
-    D = S.F * (1 - (1/3.6) * np.exp((-LA - 42)/92))
+    D = S.F * (1 - (1/3.6) * np.exp((-L_A - 42)/92))
     D = np.clip(D, 0, 1)
 
-    DRGB = D * XYZw[1]/RGBw + 1 - D
+    D_RGB = D * XYZ_w[1]/RGB_w + 1 - D
 
-    k = 1/(5*LA + 1)
+    k = 1/(5*L_A + 1)
 
-    FL = 0.2*k**4 * 5*LA + 0.1*(1 - k**4)**2 * (5*LA)**(1/3)
+    F_L = 0.2*k**4 * 5*L_A + 0.1*(1 - k**4)**2 * (5*L_A)**(1/3)
 
-    n = Yb/XYZw[1]
+    n = Y_b/XYZ_w[1]
 
     z = 1.48 + n**(1/2)
 
-    Nbb = 0.725 * (1/n)**(0.2)
-    Ncb = Nbb
+    N_bb = 0.725 * (1/n)**(0.2)
+    N_cb = N_bb
 
-    RGBwc = DRGB * RGBw
+    RGB_wc = D_RGB * RGB_w
 
-    RGBaw = 400 * ((FL*RGBwc/100)**0.42)/((FL*RGBwc/100)**0.42 + 27.13) + 0.1
+    RGB_aw = 400 * ((F_L*RGB_wc/100)**0.42)/((F_L*RGB_wc/100)**0.42 + 27.13) + 0.1
 
-    Aw = (np.array([2, 1, 1/20]) @ RGBaw - 0.305) * Nbb
+    A_w = (np.array([2, 1, 1/20]) @ RGB_aw - 0.305) * N_bb
 
 
 class CAM16:
@@ -130,11 +147,11 @@ class CAM16:
 
     @property
     def Q(self):
-        return (4/VC.S.c) * (self.J/100)**0.5 * (VC.Aw + 4) * VC.FL**0.25
+        return (4/VC.S.c) * (self.J/100)**0.5 * (VC.A_w + 4) * VC.F_L**0.25
     
     @property
     def M(self):
-        return self.C * VC.FL**0.25
+        return self.C * VC.F_L**0.25
     
     @property
     def s(self):
@@ -144,9 +161,9 @@ class CAM16:
     def from_CAM16UCS(cls, Jp, Cp, hp):
         J = Jp/(1.7-0.007*Jp)
 
-        Mp = Cp*VC.FL**0.25
+        Mp = Cp*VC.F_L**0.25
         M = (np.exp(0.0228*Mp) - 1)/0.0228
-        C = M/VC.FL**0.25
+        C = M/VC.F_L**0.25
 
         h = hp
 
@@ -157,7 +174,7 @@ class CAM16:
 
         Mp = np.log(1+0.0228*self.M)/0.0228
 
-        Cp = Mp/VC.FL**0.25
+        Cp = Mp/VC.F_L**0.25
         
         hp = self.h
 
@@ -173,11 +190,11 @@ class CAM16:
     def _from_XYZ(cls, XYZ):
         # Cone response
         RGB = CAT16_MATRIX @ XYZ
-        RGB = VC.DRGB * RGB
+        RGB = VC.D_RGB * RGB
         RGB = np.where(
             RGB < 0,
-            400 * (VC.FL*RGB/100)**0.42/((VC.FL*RGB/100)**0.42 + 27.13) + 0.1,
-            -400 * (-VC.FL*RGB/100)**0.42/((-VC.FL*RGB/100)**0.42 + 27.13) + 0.1
+            400 * (VC.F_L*RGB/100)**0.42/((VC.F_L*RGB/100)**0.42 + 27.13) + 0.1,
+            -400 * (-VC.F_L*RGB/100)**0.42/((-VC.F_L*RGB/100)**0.42 + 27.13) + 0.1
         )
 
         # Red-green and yellow-blue components
@@ -194,16 +211,16 @@ class CAM16:
         hp = h + 360 if h < HUE_DATA.at[0, 'h'] else h
 
         # Eccentricity
-        e = self._eccentricity(hp)
+        e = cls._eccentricity(hp)
 
         # Achromatic response
-        A = (np.array([2, 1, 1/20]) @ RGB - 0.305)*VC.Nbb
+        A = (np.array([2, 1, 1/20]) @ RGB - 0.305)*VC.N_bb
 
         # Lightness
-        J = 100*(A/VC.Aw)**(VC.S.c*VC.z)
+        J = 100*(A/VC.A_w)**(VC.S.c*VC.z)
 
         # Chroma
-        p1 = (50000/13) * VC.S.Nc * VC.Ncb * e * (a**2 + b**2)**(1/2)
+        p1 = (50000/13) * VC.S.Nc * VC.N_cb * e * (a**2 + b**2)**(1/2)
         p2 = np.array([1, 1, 21/20]) @ RGB
 
         C = (p1/p2)**0.9 * (J/100)**0.5 * (1.64 - 0.29**VC.n)**0.73
@@ -218,10 +235,10 @@ class CAM16:
     def _as_XYZ(self):
         t = (self.C / ((self.J/100)**(1/2) * (1.64 - 0.29**VC.n)**0.73))**(1/0.9)
         e = (1/4) * (np.cos(self.h*(np.pi/180) + 2) + 3.8)
-        A = VC.Aw * (self.J/100)**(1/(VC.S.c * VC.z))
+        A = VC.A_w * (self.J/100)**(1/(VC.S.c * VC.z))
 
-        p1 = ((50000/13) * VC.S.Nc * VC.Ncb) * e * (1/t)
-        p2 = A/VC.Nbb + 0.305
+        p1 = ((50000/13) * VC.S.Nc * VC.N_cb) * e * (1/t)
+        p2 = A/VC.N_bb + 0.305
         p3 = 21/20
 
         h = np.radians(self.h)
@@ -240,9 +257,9 @@ class CAM16:
             a = (p2 * (2+p3) * (460/1403))/(p5 + (2+p3) * (220/1403) - ((27/1403) - p3 * (6300/1403)) * np.tan(h))
             b = a * np.tan(h)
 
-        RGBa = (AB_TO_RGB_MATRIX @ np.array([p2, a, b]))/1403
-        RGBc = np.sign(RGBa - 0.1) * (100/VC.FL) * ((27.13 * np.abs(RGBa-0.1))/(400 - np.abs(RGBa-0.1)))**(1/0.42)
-        RGB = RGBc / VC.DRGB
+        RGB_a = (AB_TO_RGB_MATRIX @ np.array([p2, a, b]))/1403
+        RGB_c = np.sign(RGB_a - 0.1) * (100/VC.F_L) * ((27.13 * np.abs(RGB_a-0.1))/(400 - np.abs(RGB_a-0.1)))**(1/0.42)
+        RGB = RGB_c / VC.D_RGB
 
         XYZ = CAT16_INVERSE @ RGB
 
@@ -311,3 +328,26 @@ class CAM16:
     @staticmethod
     def _eccentricity(h):
         return (1/4)*(np.cos(h*np.pi/180 + 2) + 3.8)
+
+
+# from PIL import Image, ImageDraw
+
+# img = Image.new('RGBA', (780, 660), '#8f8f8f')
+# draw = ImageDraw.Draw(img)
+
+# h = 162
+
+# for Jp in range(10, 101, 10):
+#     for Cp in range(10, 111, 10):
+#         R, G, B = CAM16.from_CAM16UCS(Jp, Cp, h).as_sRGB()
+
+#         if not (0 <= R <= 255 and 0 <= G <= 255 and 0 <= B <= 255):
+#             continue
+
+#         Cl = (Cp)*6
+#         Jl = 660-(Jp)*6
+#         Cr = (Cp+10)*6
+#         Jr = 660-(Jp+10)*6
+#         draw.rectangle(((Cl, Jl), (Cr, Jr)), fill=f'#{R:02x}{G:02x}{B:02x}')
+
+# img.save(f'D65_{h}.png')
