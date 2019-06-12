@@ -142,24 +142,27 @@ class CAM16:
         return 100 * (self.M/self.Q)**0.5
 
     @classmethod
-    def from_CAM16UCS(cls, J, C, h):
-        J = J / (1.7-0.007*J)
+    def from_CAM16UCS(cls, Jp, Cp, hp):
+        J = Jp/(1.7-0.007*Jp)
 
-        M = C*VC.FL**0.25
-        M = (np.exp(M*0.0228) - 1)/0.0228
+        Mp = Cp*VC.FL**0.25
+        M = (np.exp(0.0228*Mp) - 1)/0.0228
         C = M/VC.FL**0.25
+
+        h = hp
 
         return cls(J, C, h)
 
     def as_CAM16UCS(self):
-        J = 1.7*self.J/(1 + 0.007*self.J)
+        Jp = 1.7*self.J/(1+0.007*self.J)
+
+        Mp = np.log(1+0.0228*self.M)/0.0228
+
+        Cp = Mp/VC.FL**0.25
         
-        M = np.log(1+0.0228*self.M)/0.0228
-        C = M/VC.FL**0.25
+        hp = self.h
 
-        h = self.h
-
-        return (J, C, h)
+        return (Jp, Cp, hp)
 
     @classmethod
     def from_XYZ(cls, X, Y, Z):
@@ -297,7 +300,6 @@ class CAM16:
         # Decompanded sRGB
         sRGB = XYZ_TO_SRGB_MATRIX @ (XYZ/100)
 
-        print(sRGB)
         # Companded sRGB
         sRGB = np.where(
             sRGB <= 0.0031308,
@@ -310,9 +312,3 @@ class CAM16:
     @staticmethod
     def _eccentricity(h):
         return (1/4)*(np.cos(h*np.pi/180 + 2) + 3.8)
-
-
-if __name__ == '__main__':
-    # color = CAM16(J=50, C=50, h=18+72*2)
-    color = CAM16.from_CAM16UCS(J=50, C=40, h=18+72*2)
-    print(color.as_sRGB())
