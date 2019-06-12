@@ -53,6 +53,7 @@ SURROUND_PARAMETERS = pd.DataFrame(np.array([
 
 @dataclass
 class Illuminant:
+
     def __init__(self, x, y):
         self.x = x
         self.y = y
@@ -75,10 +76,8 @@ class VC:
     # Using Illuminant D65/2°.
     # XYZ tristimulus values, normalizing for relative luminance.
     # Source: Illuminant D65, Wikipedia.
-
     D65 = Illuminant(x=0.31271, y=0.32902)
     XYZ_w = np.array([D65.X, D65.Y, D65.Z])
-    # XYZ_w = ILLUMINANT_D75.loc['2°']
 
     # Using Average surround.
     # Source: Table A1, Comprehensive color solutions. DOI: 10.1002/col.22131.
@@ -91,8 +90,7 @@ class VC:
     Y_b = 20
     L_A = (L_w * Y_b)/XYZ_w[1]
 
-    # Question: Is this correct? Shouldn’t it be LMS color space?
-    RGB_w = SRGB_TO_XYZ_MATRIX @ XYZ_w
+    RGB_w = CAT16_MATRIX @ XYZ_w
 
     D = S.F * (1 - (1/3.6) * np.exp((-L_A - 42)/92))
     D = np.clip(D, 0, 1)
