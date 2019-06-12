@@ -10,6 +10,7 @@ It can translate from, and to, sRGB and XYZ color spaces.
 
 ## Todo
 - Add documentation, and explain how to use the class and methods.
+- Fix numpy/math error.
 
 ## Ideas
 - Add HSV, HSL, CIELab transforms.
