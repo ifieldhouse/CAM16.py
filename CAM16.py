@@ -59,17 +59,16 @@ ILLUMINANT_D65 = pd.DataFrame(np.array([
 
 @dataclass
 class VC:
-
-    # Using Illuminant D65/2°
-    # XYZ tristimulus values, normalizing for relative luminance
+    # Using Illuminant D65/2°.
+    # XYZ tristimulus values, normalizing for relative luminance.
     # Source: Illuminant D65, Wikipedia.
     XYZw = ILLUMINANT_D65.loc['2°']
 
-    # Using Average surround
-    # Source: Table A1, Comprehensive color solutions. DOI: 10.1002/col.22131
+    # Using Average surround.
+    # Source: Table A1, Comprehensive color solutions. DOI: 10.1002/col.22131.
     S = SURROUND_PARAMETERS.loc['average']
 
-    # Using a sRGB luminance of 64 lux, and surround reflectance of 20%
+    # Using a sRGB luminance of 64 lux, and surround reflectance of 20%.
     # Source: sRGB, Wikipedia.
     Ew = 64
     Lw = Ew/np.pi
