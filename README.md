@@ -8,11 +8,15 @@ It can translate from, and to, sRGB and XYZ color spaces.
 - Numpy
 - Pandas
 
+## Todo
+- Add documentation, and explain how to use the class and methods.
+
 ## Ideas
 - Add HSV, HSL, CIELab transforms.
 - Add multiple ways to create a CAM16 color (Jab, JCh, QMh, etc).
+- Add color interpolation.
 
-## Notes
+## Code notes
 - Underscore-prefixed methods are internal, and use Numpy arrays as input and output.
 - Non-prefixed methods use data types as input, and return data types or tuples.
 
