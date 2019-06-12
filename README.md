@@ -19,7 +19,7 @@ It can translate from, and to, sRGB and XYZ color spaces.
 ## Science notes
 - _J_ can be calculated with _Q_, and vice versa.
 Also, _C_ can be calculated with _M_, and vice versa, too.
-Therefore, a chromatic and a achromatic parameter are needed.
-- _s_ can replace any of the two parameters (chromatic and achromatic).
+Therefore, only one chromatic and achromatic parameter are needed.
+- _s_ can replace any chromatic or achromatic parameter.
 - _h_ can be calculated with _H_, ad vice versa.
 - _M_ can be calculated with _a_ and _b_.
