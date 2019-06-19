@@ -76,42 +76,45 @@ class VC:
     # Using Illuminant D65/2°.
     # XYZ tristimulus values, normalizing for relative luminance.
     # Source: Illuminant D65, Wikipedia.
-    D65 = Illuminant(x=0.31271, y=0.32902)
+    D65 = Illuminant(x=0.31270, y=0.32900)
     XYZ_w = np.array([D65.X, D65.Y, D65.Z])
 
-    # Using Average surround.
+    # Using dim surround (most likely you will use a screen display).
     # Source: Table A1, Comprehensive color solutions. DOI: 10.1002/col.22131.
-    S = SURROUND_PARAMETERS.loc['average']
+    S = SURROUND_PARAMETERS.loc['dim']
 
     # Using a sRGB luminance of 64 lux, and surround reflectance of 20%.
     # Source: sRGB, Wikipedia.
+    # Illuminance of the reference white
     E_w = 64
+    # Absolute luminance of the reference white
     L_w = E_w/np.pi
+    # Relative luminance of the adapting field
     Y_b = 20
+    # Absolute luminance of the adapting field
     L_A = (L_w * Y_b)/XYZ_w[1]
 
+    # Cone response
     RGB_w = CAT16_MATRIX @ XYZ_w
 
+    # Degree of adaptation
     D = S.F * (1 - (1/3.6) * np.exp((-L_A - 42)/92))
     D = np.clip(D, 0, 1)
-
     D_RGB = D * XYZ_w[1]/RGB_w + 1 - D
 
+    # Factor of luminance level adaptation
     k = 1/(5*L_A + 1)
-
     F_L = 0.2*k**4 * 5*L_A + 0.1*(1 - k**4)**2 * (5*L_A)**(1/3)
 
     n = Y_b/XYZ_w[1]
-
     z = 1.48 + n**(1/2)
-
     N_bb = 0.725 * (1/n)**(0.2)
     N_cb = N_bb
 
     RGB_wc = D_RGB * RGB_w
-
     RGB_aw = 400 * ((F_L*RGB_wc/100)**0.42)/((F_L*RGB_wc/100)**0.42 + 27.13) + 0.1
 
+    # Achromatic response
     A_w = (np.array([2, 1, 1/20]) @ RGB_aw - 0.305) * N_bb
 
 
@@ -121,6 +124,8 @@ class CAM16:
         self.J = J
         self.C = C
         self.h = h
+
+        # set_M(), set_s(), set_Q(), set_H(), set_a(), set_b()
 
     @property
     def H(self):
@@ -294,6 +299,8 @@ class CAM16:
 
         sRGB = self._as_sRGB()
 
+        # Check if the value is inside [0, 1]
+
         if mode in ('dec', 'decimal'):
             R, G, B = (255*sRGB).astype(int)
             return R, G, B
@@ -326,26 +333,3 @@ class CAM16:
     @staticmethod
     def _eccentricity(h):
         return (1/4)*(np.cos(h*np.pi/180 + 2) + 3.8)
-
-
-# from PIL import Image, ImageDraw
-
-# img = Image.new('RGBA', (780, 660), '#8f8f8f')
-# draw = ImageDraw.Draw(img)
-
-# h = 162
-
-# for Jp in range(10, 101, 10):
-#     for Cp in range(10, 111, 10):
-#         R, G, B = CAM16.from_CAM16UCS(Jp, Cp, h).as_sRGB()
-
-#         if not (0 <= R <= 255 and 0 <= G <= 255 and 0 <= B <= 255):
-#             continue
-
-#         Cl = (Cp)*6
-#         Jl = 660-(Jp)*6
-#         Cr = (Cp+10)*6
-#         Jr = 660-(Jp+10)*6
-#         draw.rectangle(((Cl, Jl), (Cr, Jr)), fill=f'#{R:02x}{G:02x}{B:02x}')
-
-# img.save(f'D65_{h}.png')
