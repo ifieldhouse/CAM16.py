@@ -129,24 +129,18 @@ class CAM16:
 
     @property
     def H(self):
-        if HUE_DATA.at[0, 'h'] < self.h < HUE_DATA.at[1, 'h']:
-            i = 1
-        elif HUE_DATA.at[1, 'h'] < self.h < HUE_DATA.at[2, 'h']:
-            i = 2
-        elif HUE_DATA.at[2, 'h'] < self.h < HUE_DATA.at[3, 'h']:
-            i = 3
-        elif HUE_DATA.at[3, 'h'] < self.h < HUE_DATA.at[4, 'h']:
-            i = 4
+        H1 = HUE_DATA[HUE_DATA['h'] < h].iloc[-1]
+        H2 = HUE_DATA[HUE_DATA['h'] >= h].iloc[0]
 
-        p1 = (self.h - HUE_DATA.at[i-1, 'h'])/self._eccentricity(HUE_DATA.at[i-1, 'h'])
-        p2 = (HUE_DATA.at[i, 'h'] - self.h)/self._eccentricity(HUE_DATA.at[i, 'h'])
+        p1 = (h - H1.h) / H1.e
+        p2 = (H2.h - h) / H2.e
 
-        H = HUE_DATA.at[i-1, 'H'] + (100*p1)/(p1 + p2)
+        H = H1.H + (100*p1)/(p1 + p2)
 
-        p3 = HUE_DATA.at[i, 'H'] - H
-        p4 = H - HUE_DATA.at[i-1, 'H']
+        p3 = H2.H - H
+        p4 = H - H1.H
         
-        return {HUE_DATA.at[i-1, 'hue']: p3, HUE_DATA.at[i, 'hue']: p4}
+        return {H1.hue: p3, H2.hue: p4}
 
     @property
     def Q(self):
