@@ -129,11 +129,11 @@ class CAM16:
 
     @property
     def H(self):
-        H1 = HUE_DATA[HUE_DATA['h'] < h].iloc[-1]
-        H2 = HUE_DATA[HUE_DATA['h'] >= h].iloc[0]
+        H1 = HUE_DATA[HUE_DATA['h'] < self.h].iloc[-1]
+        H2 = HUE_DATA[HUE_DATA['h'] >= self.h].iloc[0]
 
-        p1 = (h - H1.h) / H1.e
-        p2 = (H2.h - h) / H2.e
+        p1 = (self.h - H1.h) / H1.e
+        p2 = (H2.h - self.h) / H2.e
 
         H = H1.H + (100*p1)/(p1 + p2)
 
