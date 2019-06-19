@@ -8,6 +8,9 @@ It can translate from, and to, sRGB and XYZ color spaces.
 - Numpy
 - Pandas
 
+## Todo
+- Replace the Q, M, H properties into methods, to reduce the cost of calling them each time.
+
 ## Ideas
 - Add HSV, HSL, CIELab transforms.
 - Add multiple ways to create a CAM16 color (Jab, JCh, QMh, etc).
