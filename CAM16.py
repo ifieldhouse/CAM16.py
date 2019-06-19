@@ -27,6 +27,18 @@ XYZ_TO_SRGB_MATRIX = np.array([
     [0.055643, -0.204026, 1.057225]
 ])
 
+ACES2065_TO_XYZ_MATRIX = np.array([
+    [0.95255_23959, 0.00000_00000, 0.00009_36786],
+    [0.34396_64498, 0.72816_60966, -0.07213_25464],
+    [0.00000_00000, 0.00000_00000, 1.00882_51844]
+])
+
+XYZ_TO_ACES2065_MATRIX = np.array([
+    [1.04981_10175, 0.00000_00000, -0.00009_74845],
+    [-0.49590_30231, 1.37331_30458, 0.09824_00361],
+    [0.00000_00000, 0.00000_00000, 0.99125_20182]
+])
+
 AB_TO_RGB_MATRIX = np.array([
     [460, 451, 228],
     [460, -891, -261],
@@ -323,6 +335,35 @@ class CAM16:
         )
 
         return sRGB
+
+    @classmethod
+    def from_ACES2065(cls, R, G, B):
+        ACES = np.array([R, G, B])
+
+        return cls._from_ACES2065(ACES)
+    
+    @classmethod
+    def _from_ACES2065(cls, ACES):
+        # Tristimulus values
+        XYZ = 100*(ACES2065_TO_XYZ_MATRIX @ ACES)
+
+        return cls._from_XYZ(XYZ)
+
+    def as_ACES2065(self):
+
+        ACES = self._as_ACES2065()
+
+        R, G, B = ACES
+
+        return R, G, B
+
+    def _as_ACES2065(self):
+        # Tristimulus values
+        XYZ = self._as_XYZ()
+
+        ACES = XYZ_TO_ACES2065_MATRIX @ (XYZ/100)
+
+        return ACES
 
     @staticmethod
     def _eccentricity(h):
